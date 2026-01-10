@@ -1,0 +1,4 @@
+# Waipa District Council - Recycling Collection Dates Finder
+# Minimal dependencies
+
+playwright>=1.40.0

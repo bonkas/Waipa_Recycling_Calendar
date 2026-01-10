@@ -1,0 +1,64 @@
+# Keep only the core tracked files
+*
+!.gitignore
+!get_dates_working.py
+!README.md
+!requirements.txt
+
+# Notes:
+# - Everything else (venvs, Playwright artifacts, temp files) remains ignored by default.
+# - To track additional files, add more !exceptions above.# .gitignore for Waipa Recycling Scraper
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Downloaded PDFs
+*.pdf
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Playwright
+playwright-report/
+test-results/
