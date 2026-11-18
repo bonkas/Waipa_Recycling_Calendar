@@ -275,8 +275,8 @@ def main():
     """Get recycling collection dates for a given address"""
     
     parser = argparse.ArgumentParser(description='Waipa Recycling Collection Dates Finder')
-    parser.add_argument('address', nargs='?', default='126 Bank Street, Te Awamutu 3800', 
-                        help='The address to look up (default: 126 Bank Street, Te Awamutu 3800)')
+    parser.add_argument('address', nargs='?', default='101 Bank Street, Te Awamutu 3800',
+                        help='The address to look up (default: 101 Bank Street, Te Awamutu 3800 - the Waipa District Council office)')
     parser.add_argument('--headless', action='store_true', help='Run browser in headless mode')
     parser.add_argument('--manual-select', action='store_true', help='Manually click the correct address in the map')
     
