@@ -2,6 +2,8 @@
 *
 !.gitignore
 !get_dates_working.py
+!get_dates_api.py
+!n8n-workflow.json
 !README.md
 !requirements.txt
 

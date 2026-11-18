@@ -1,0 +1,446 @@
+{
+  "name": "Recycling",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        128,
+        0
+      ],
+      "id": "7ab830ee-f38f-4795-bb5b-886ae7e09ff2",
+      "name": "Daily 6am Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "formatDate",
+        "date": "={{ $json.Date }}",
+        "format": "custom",
+        "customFormat": "dd-MM-yyyy",
+        "outputFieldName": "formattedRecycleDate",
+        "options": {
+          "timezone": true
+        }
+      },
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        656,
+        0
+      ],
+      "id": "d91a7c8d-307e-418e-9141-e141971d5a38",
+      "name": "Format Recycling Date"
+    },
+    {
+      "parameters": {
+        "operation": "formatDate",
+        "date": "={{ $today }}",
+        "format": "custom",
+        "customFormat": "dd-MM-yyyy",
+        "outputFieldName": "formattedTodaysDate",
+        "options": {
+          "timezone": true
+        }
+      },
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "id": "d0d63e45-e742-44c0-857f-bf5568d49ec0",
+      "name": "Format Todays Date"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bb12442e-39c2-4bc9-ac4a-0a4c32a6e14d",
+              "leftValue": "={{ $json.RecycleDate }}",
+              "rightValue": "={{ $json.TodaysDate }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1584,
+        80
+      ],
+      "id": "e828799d-1ceb-4142-b9bd-9bb473a3f0ef",
+      "name": "Is Today Collection Day?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ba112c5e-b64d-4333-b93d-b33527359663",
+              "name": "RecycleDate",
+              "value": "={{ $('Format Recycling Date').item.json.formattedRecycleDate }}",
+              "type": "string"
+            },
+            {
+              "id": "7b14608d-6047-4827-afcf-0106a78a3574",
+              "name": "TodaysDate",
+              "value": "={{ $json.formattedTodaysDate }}",
+              "type": "string"
+            },
+            {
+              "id": "3b84b6f6-2cd3-45df-9dca-95d4b9c68d1b",
+              "name": "Bin",
+              "value": "={{ $('Get Recycling Info').item.json.Bin }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1104,
+        0
+      ],
+      "id": "373c2e94-1769-497f-8059-43b830ea85e5",
+      "name": "Combine Date & Bin"
+    },
+    {
+      "parameters": {
+        "batchSize": 2,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "935caf7e-6201-4214-9019-ad5bf0e0cf67",
+      "name": "Loop Each Bin"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calls the Waipa District Council \"Recycling Day Finder\" IntraMaps API directly\n// to get the next collection dates for both bins, instead of maintaining a\n// yearly Postgres table by hand. Runs fresh every execution, so it's always\n// up to date automatically.\n\nconst BASE = 'https://waipadc.spatial.t1cloud.com/spatial/IntraMaps/ApplicationEngine';\nconst CONFIG_ID = '6aa41407-1db8-44e1-8487-0b9a08965283';\nconst PROJECT_ID = 'b5bc138e-edce-4b01-b159-ec44539ab455';\nconst MODULE_ID = '5373c4e1-c975-4c8f-b51a-0ac976f5313c';\nconst SELECTION_LAYER = 'e7163a17-2f10-42b1-8dbf-8c53adf089a8';\nconst SEARCH_FORM_ID = 'e6677a33-9d47-407a-b199-5c7967a4be07';\n\n// Change this to look up a different property - a street address works best\nconst ADDRESS = 'YOUR ADDRESS HERE';\n\nconst commonHeaders = {\n  'Content-Type': 'application/json',\n  'X-Requested-With': 'XMLHttpRequest',\n  'Origin': 'https://waipadc.spatial.t1cloud.com',\n  'Referer': `https://waipadc.spatial.t1cloud.com/spatial/IntraMaps/ApplicationEngine/frontend/mapbuilder/default.htm?configId=${CONFIG_ID}`,\n};\n\n// Step 1: start a session (session id comes back as a response header, not in the body)\nconst projectsResponse = await this.helpers.httpRequest({\n  method: 'POST',\n  url: `${BASE}/Projects/`,\n  qs: {\n    configId: CONFIG_ID,\n    appType: 'MapBuilder',\n    project: PROJECT_ID,\n    datasetCode: '',\n    includeDisabledModules: 'true',\n  },\n  headers: commonHeaders,\n  returnFullResponse: true,\n});\nconst session = projectsResponse.headers['x-intramaps-session'];\nif (!session) {\n  throw new Error('Did not receive an IntraMaps session header from the council API');\n}\n\n// Step 2: load the Recycling Day Finder module into this session\nawait this.helpers.httpRequest({\n  method: 'POST',\n  url: `${BASE}/Modules/`,\n  qs: { IntraMapsSession: session },\n  headers: commonHeaders,\n  body: { module: MODULE_ID },\n  json: true,\n});\n\n// Step 3: search for the address to find its mapKey/dbKey\nconst searchResponse = await this.helpers.httpRequest({\n  method: 'POST',\n  url: `${BASE}/Search/`,\n  qs: {\n    infoPanelWidth: 350,\n    mode: 'Refresh',\n    form: SEARCH_FORM_ID,\n    resubmit: 'false',\n    selectionLayersFilter: SELECTION_LAYER,\n    IntraMapsSession: session,\n  },\n  headers: commonHeaders,\n  body: { fields: [ADDRESS] },\n  json: true,\n});\n\nconst matches = searchResponse.fullText || [];\nif (matches.length === 0) {\n  throw new Error(`No property found matching \"${ADDRESS}\"`);\n}\n// If there's more than one match (e.g. \"42\" vs \"42A\"), this picks the first one -\n// check match.displayValue below, or inspect matches[], if you need to disambiguate\nconst match = matches[0];\n\n// Step 4: fetch the recycling info panel for that property\nconst refineResponse = await this.helpers.httpRequest({\n  method: 'POST',\n  url: `${BASE}/Search/Refine/Set`,\n  qs: { IntraMapsSession: session },\n  headers: commonHeaders,\n  body: {\n    selectionLayer: SELECTION_LAYER,\n    mapKey: match.mapKey,\n    infoPanelWidth: 350,\n    mode: 'Refresh',\n    dbKey: match.dbKey,\n    zoomType: 'current',\n  },\n  json: true,\n});\n\nconst fields = refineResponse.infoPanels.info1.feature.fields;\nconst getField = (caption) => {\n  const field = fields.find((f) => f.caption === caption);\n  return field ? field.value.value : null;\n};\n\nconst months = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };\nconst parseNextDate = (text) => {\n  const m = text && text.match(/(\\d{1,2})-([A-Za-z]{3})-(\\d{4})/);\n  if (!m) return null;\n  const [, day, mon, year] = m;\n  return new Date(Number(year), months[mon], Number(day)).toISOString();\n};\n\nconst propertyAddress = getField('Property Address');\nconst yellowText = getField('Mixed Recycling (YELLOW bin - Plastic 1 2 5, Paper, Cardboard, Cans):');\nconst blueText = getField('Glass Recycling (BLUE bin):');\n\nreturn [\n  { json: { Bin: 'Yellow', Date: parseNextDate(yellowText), Description: yellowText, Address: propertyAddress, MatchedDisplayValue: match.displayValue } },\n  { json: { Bin: 'Blue', Date: parseNextDate(blueText), Description: blueText, Address: propertyAddress, MatchedDisplayValue: match.displayValue } },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "baf77236-bcaa-46b9-af78-8043b53b4dd2",
+      "name": "Get Recycling Info"
+    },
+    {
+      "parameters": {
+        "resource": "service",
+        "operation": "call",
+        "domain": "notify",
+        "service": "persistent_notification",
+        "serviceAttributes": {
+          "attributes": [
+            {
+              "name": "message",
+              "value": "=Today is recycling day! Put out the  {{ $json.Bin }} Bin"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.homeAssistant",
+      "typeVersion": 1,
+      "position": [
+        2176,
+        64
+      ],
+      "id": "8dddbbef-b58b-4486-a5a8-2d65b47857a6",
+      "name": "Notify Today (Home Assistant)",
+      "credentials": {
+        "homeAssistantApi": {
+          "id": "EatsdDBHgJ9YdMWG",
+          "name": "Home Assistant account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input (from \"Edit Fields\", both formatted as dd-MM-yyyy strings):\n// - RecycleDate\n// - TodaysDate\n\nfunction parseDDMMYYYY(str) {\n  const [d, m, y] = str.split('-').map(Number);\n  return new Date(y, m - 1, d);\n}\n\nconst recycleLocal = parseDDMMYYYY($input.first().json.RecycleDate);\nconst todayLocal = parseDDMMYYYY($input.first().json.TodaysDate);\n\n// Calculate the difference in whole days\nconst diffDays = Math.round((recycleLocal - todayLocal) / (1000 * 60 * 60 * 24));\n\n// Return true if it's exactly 1 day before\nreturn [\n  {\n    json: {\n      isDayBefore: diffDays === 1,\n      diffDays\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        336
+      ],
+      "id": "7552c0f5-c5fb-4cd7-9b14-d20e421b7d27",
+      "name": "Check If Tomorrow"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bb12442e-39c2-4bc9-ac4a-0a4c32a6e14d",
+              "leftValue": "={{ $json.isDayBefore }}",
+              "rightValue": "={{ $json.TodaysDate }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1584,
+        336
+      ],
+      "id": "819b2758-c2ef-486b-960a-0c5730c0e7b6",
+      "name": "Is Tomorrow Collection Day?"
+    },
+    {
+      "parameters": {
+        "resource": "service",
+        "operation": "call",
+        "domain": "notify",
+        "service": "persistent_notification",
+        "serviceAttributes": {
+          "attributes": [
+            {
+              "name": "message",
+              "value": "=Tomorrow is recycling day! Put out the  {{ $json.Bin }} Bin"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.homeAssistant",
+      "typeVersion": 1,
+      "position": [
+        2176,
+        320
+      ],
+      "id": "146237c3-bb31-4707-9a78-0234248f48c5",
+      "name": "Notify Tomorrow (Home Assistant)",
+      "credentials": {
+        "homeAssistantApi": {
+          "id": "EatsdDBHgJ9YdMWG",
+          "name": "Home Assistant account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.smtp2go.com/v3/sms/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Smtp2go-Api-Key",
+              "value": "YOUR_SMTP2GO_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"destination\": [\n    \"+64000000000\",\n    \"+64000000001\"\n  ],\n  \"content\": \"Today is recycling day! Put out the {{ $json.Bin }}  Bin\"\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2176,
+        -176
+      ],
+      "id": "a61a5a11-b601-4ad3-a4ed-873d930d2ef1",
+      "name": "Notify Today (SMS)",
+      "disabled": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily 6am Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Recycling Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recycling Date": {
+      "main": [
+        [
+          {
+            "node": "Format Todays Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Todays Date": {
+      "main": [
+        [
+          {
+            "node": "Combine Date & Bin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Today Collection Day?": {
+      "main": [
+        [
+          {
+            "node": "Notify Today (Home Assistant)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Today (SMS)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Each Bin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Date & Bin": {
+      "main": [
+        [
+          {
+            "node": "Loop Each Bin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Each Bin": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Is Today Collection Day?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check If Tomorrow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recycling Info": {
+      "main": [
+        [
+          {
+            "node": "Format Recycling Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "Is Tomorrow Collection Day?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Tomorrow Collection Day?": {
+      "main": [
+        [
+          {
+            "node": "Notify Tomorrow (Home Assistant)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Each Bin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c2af0970-2cc0-4545-a34f-99d5fd9495f7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c8872701ca9783b53160c9912db6c45aaf90095932a801d1a12a33ca46ef904c"
+  },
+  "nodeGroups": [],
+  "id": "XME9bfqRIRMs9LUd",
+  "tags": []
+}

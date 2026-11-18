@@ -1,4 +1,7 @@
 # Waipa District Council - Recycling Collection Dates Finder
-# Minimal dependencies
 
+# API-based approach (get_dates_api.py) - recommended, no browser needed
+requests>=2.31.0
+
+# Playwright-based approach (get_dates_working.py) - kept as a fallback
 playwright>=1.40.0
